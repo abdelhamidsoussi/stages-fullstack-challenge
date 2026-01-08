@@ -13,12 +13,17 @@ class ArticleController extends Controller
      */
     public function index(Request $request)
     {
-        $articles = Article::all();
+             // Précharger authors et comments pour éviter N+1
+        $articles = Article::with([
+            'author:id,name',  // Charger seulement id et name de l'auteur
+            'comments:id,article_id,content,user_id,created_at'
+        ])
+            ->select('id', 'title', 'content', 'author_id', 'image_path', 'published_at', 'created_at')
+            ->get();
 
-        $articles = $articles->map(function ($article) use ($request) {
-            if ($request->has('performance_test')) {
-                usleep(30000); // 30ms par article pour simuler le coût du N+1
-            }
+        // Map les données sans latence artificielle
+        $articles = $articles->map(function ($article) {
+
 
             return [
                 'id' => $article->id,
