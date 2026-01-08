@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Article;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class ArticleController extends Controller
 {
@@ -13,27 +14,26 @@ class ArticleController extends Controller
      */
     public function index(Request $request)
     {
-             // Précharger authors et comments pour éviter N+1
-        $articles = Article::with([
-            'author:id,name',  // Charger seulement id et name de l'auteur
-            'comments:id,article_id,content,user_id,created_at'
-        ])
-            ->select('id', 'title', 'content', 'author_id', 'image_path', 'published_at', 'created_at')
-            ->get();
+        // Cache la liste des articles 60 secondes
+        $articles = Cache::remember('articles:list', 60, function () {
+            $items = Article::with([
+                'author:id,name',
+                'comments:id,article_id,content,user_id,created_at'
+            ])
+                ->select('id', 'title', 'content', 'author_id', 'image_path', 'published_at', 'created_at')
+                ->get();
 
-        // Map les données sans latence artificielle
-        $articles = $articles->map(function ($article) {
-
-
-            return [
-                'id' => $article->id,
-                'title' => $article->title,
-                'content' => substr($article->content, 0, 200) . '...',
-                'author' => $article->author->name,
-                'comments_count' => $article->comments->count(),
-                'published_at' => $article->published_at,
-                'created_at' => $article->created_at,
-            ];
+            return $items->map(function ($article) {
+                return [
+                    'id' => $article->id,
+                    'title' => $article->title,
+                    'content' => substr($article->content, 0, 200) . '...',
+                    'author' => $article->author->name,
+                    'comments_count' => $article->comments->count(),
+                    'published_at' => $article->published_at,
+                    'created_at' => $article->created_at,
+                ];
+            })->toArray();
         });
 
         return response()->json($articles);
@@ -79,8 +79,6 @@ class ArticleController extends Controller
 
         $articles = Article::where('title', 'LIKE', "%{$query}%")->get();
 
-
-
         $results = $articles->map(function ($article) {
             return [
                 'id' => $article->id,
@@ -113,6 +111,10 @@ class ArticleController extends Controller
             'published_at' => now(),
         ]);
 
+        // Invalide le cache
+        Cache::forget('articles:list');
+        Cache::forget('stats');
+
         return response()->json($article, 201);
     }
 
@@ -130,6 +132,11 @@ class ArticleController extends Controller
 
         $article->update($validated);
 
+        // Invalide le cache
+        Cache::forget('articles:list');
+        Cache::forget('stats');
+        Cache::forget("article:{$id}");
+
         return response()->json($article);
     }
 
@@ -141,7 +148,11 @@ class ArticleController extends Controller
         $article = Article::findOrFail($id);
         $article->delete();
 
+        // Invalide le cache
+        Cache::forget('articles:list');
+        Cache::forget('stats');
+        Cache::forget("article:{$id}");
+
         return response()->json(['message' => 'Article deleted successfully']);
     }
 }
-
