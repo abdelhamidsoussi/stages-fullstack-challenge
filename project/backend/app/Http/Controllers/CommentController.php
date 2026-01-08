@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Comment;
 use App\Models\Article;
 use Illuminate\Http\Request;
+use Mews\Purifier\Purifier;
+
 
 class CommentController extends Controller
 {
@@ -30,6 +32,8 @@ class CommentController extends Controller
             'article_id' => 'required|exists:articles,id',
             'user_id' => 'required|exists:users,id',
             'content' => 'required|string',
+            $validated['content'] = strip_tags($validated['content']);
+
         ]);
 
         $comment = Comment::create($validated);
@@ -64,6 +68,8 @@ class CommentController extends Controller
     public function update(Request $request, $id)
     {
         $comment = Comment::findOrFail($id);
+
+        $validated['content'] = strip_tags($validated['content']);
 
         $validated = $request->validate([
             'content' => 'required|string',
